@@ -10,14 +10,22 @@ import (
 )
 
 type Response struct {
-	XMLName xml.Name     `xml:"feed"`
-	Entries []CostCenter `xml:"entry"`
+	XMLName xml.Name `xml:"feed"`
+	Entries []Entry  `xml:"entry"`
+	Link    []Link   `xml:"link"`
 }
 
-type CostCenter struct {
+type Entry struct {
 	XMLName xml.Name `xml:"entry"`
 	ID      string   `xml:"id"`
 	Content Content  `xml:"content"`
+}
+
+type Link struct {
+	XMLName xml.Name `xml:"link"`
+	Rel     string   `xml:"rel,attr"`
+	Title   string   `xml:"title,attr"`
+	Href    string   `xml:"href,attr"`
 }
 
 type Content struct {
@@ -26,38 +34,74 @@ type Content struct {
 }
 
 type Properties struct {
-	XMLName     xml.Name `xml:"properties"`
-	CreatedDate string   `xml:"CreatedDate"`
-	ID          string   `xml:"ID"`
+	XMLName           xml.Name `xml:"properties"`
+	AllocationLevel   int32
+	Class1            string
+	Class2            string
+	Class3            string
+	Class4            string
+	ClassDescription1 string
+	ClassDescription2 string
+	ClassDescription3 string
+	ClassDescription4 string
+	Code              string
+	CompanyCode       string
+	CompanyName       string
+	CreatedDate       string
+	Creator           int32
+	CreatorName       string
+	Description       string
+	Description1      string
+	Description2      string
+	Description3      string
+	Description4      string
+	DirectManager     int32
+	DirectManagerName string
+	Enabled           bool
+	GLAccount         string
+	GLOffsetAccount   string
+	ID                int32
+	ModifiedDate      string
+	Modifier          int32
+	ModifierName      string
+	StandardRate      float64
+	TextFreeField1    string
+	TextFreeField2    string
+	TextFreeField3    string
+	TextFreeField4    string
+	TextFreeField5    string
+	NumberFreeField1  float64
+	NumberFreeField2  float64
+	NumberFreeField3  float64
+	NumberFreeField4  float64
+	NumberFreeField5  float64
 }
 
 type GetCostCentersConfig struct {
-	Top  *uint
-	Skip *uint
+	Top *uint
 }
 
-// GetCostCenters returns all costCenters
+// GetCostCenters returns all entries
 //
-func (service *Service) GetCostCenters(getCostCentersConfig *GetCostCentersConfig) (*[]CostCenter, *errortools.Error) {
+func (service *Service) GetCostCenters(getCostCentersConfig *GetCostCentersConfig) (*[]Entry, *errortools.Error) {
 	values := url.Values{}
 
-	skip := uint(0)
-	top := uint(100)
+	var top uint = 1
+	var skiptoken *string = nil
 
 	if getCostCentersConfig != nil {
 		if getCostCentersConfig.Top != nil {
 			top = *getCostCentersConfig.Top
 		}
-		if getCostCentersConfig.Skip != nil {
-			skip = *getCostCentersConfig.Skip
-		}
 	}
 	values.Set("$top", fmt.Sprintf("%v", top))
 
-	costCenters := []CostCenter{}
+	entries := []Entry{}
 
 	for true {
-		values.Set("$skip", fmt.Sprintf("%v", skip))
+		if skiptoken != nil {
+			values.Set("$skiptoken", *skiptoken)
+		}
 
 		response := Response{}
 
@@ -65,20 +109,20 @@ func (service *Service) GetCostCenters(getCostCentersConfig *GetCostCentersConfi
 			URL:           service.url(fmt.Sprintf("CostCenter/?%s", values.Encode())),
 			ResponseModel: &response,
 		}
-		fmt.Println(service.url(fmt.Sprintf("CostCenter/?%s", values.Encode())))
 
 		_, _, e := service.get(&requestConfig)
 		if e != nil {
 			return nil, e
 		}
 
-		costCenters = append(costCenters, response.Entries...)
+		entries = append(entries, response.Entries...)
 
-		if len(response.Entries) < int(top) {
+		skiptoken = service.extractSkiptoken(&response.Link)
+
+		if skiptoken == nil {
 			break
 		}
-		skip += top
 	}
 
-	return &costCenters, nil
+	return &entries, nil
 }

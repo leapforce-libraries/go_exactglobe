@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"net/http"
+	"net/url"
 
 	"github.com/Azure/go-ntlmssp"
 	errortools "github.com/leapforce-libraries/go_errortools"
@@ -11,7 +12,8 @@ import (
 )
 
 const (
-	apiPath string = "services/Exact.Entity.REST.EG"
+	apiPath    string = "services/Exact.Entity.REST.EG"
+	DateFormat string = "2006-01-02T15:04:05"
 )
 
 // type
@@ -58,12 +60,17 @@ func NewService(serviceConfig *ServiceConfig) (*Service, *errortools.Error) {
 		return nil, errortools.ErrorMessage("Password not provided")
 	}
 
-	httpServiceConfig := go_http.ServiceConfig{
+	accept := go_http.AcceptXML
+	httpService, e := go_http.NewService(&go_http.ServiceConfig{
+		Accept: &accept,
 		HTTPClient: &http.Client{
 			Transport: ntlmssp.Negotiator{
 				RoundTripper: &http.Transport{},
 			},
 		},
+	})
+	if e != nil {
+		return nil, e
 	}
 
 	return &Service{
@@ -72,7 +79,7 @@ func NewService(serviceConfig *ServiceConfig) (*Service, *errortools.Error) {
 		databaseName: serviceConfig.DatabaseName,
 		username:     serviceConfig.Username,
 		password:     serviceConfig.Password,
-		httpService:  go_http.NewService(&httpServiceConfig),
+		httpService:  httpService,
 	}, nil
 }
 
@@ -114,4 +121,27 @@ func (service *Service) put(requestConfig *go_http.RequestConfig) (*http.Request
 
 func (service *Service) delete(requestConfig *go_http.RequestConfig) (*http.Request, *http.Response, *errortools.Error) {
 	return service.httpRequest(http.MethodDelete, requestConfig)
+}
+
+func (service *Service) extractSkiptoken(links *[]Link) *string {
+	if links == nil {
+		return nil
+	}
+
+	for _, link := range *links {
+		if link.Rel == "next" {
+			_url, err := url.Parse(link.Href)
+			if err != nil {
+				errortools.CaptureError(err)
+				continue
+			}
+
+			skiptoken := _url.Query().Get("$skiptoken")
+			if skiptoken != "" {
+				return &skiptoken
+			}
+		}
+	}
+
+	return nil
 }
